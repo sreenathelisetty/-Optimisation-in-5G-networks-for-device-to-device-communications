@@ -1,0 +1,322 @@
+
+
+%Initialization
+close all;
+clear all;
+
+
+%%Simulation parameters
+
+
+%%% M = 128, Tp = 64, and SNR= 20 dB.
+NTX=2;%hz
+NRX=2;
+No.of.bits=10^4;                                                                        
+channel_size=64;
+                                                                                                             
+base_range = 0.05^2;                                                                     
+range_parameter = 0.05^2;                                                              
+
+tScalings = [0 1/2];
+
+maximum_power = 2.2222e-8; 
+maxSNRdB = 20; 
+max_noise_ratio = 10.^(maxSNRdB/10); 
+SE=100;SC=10;
+power_factor=50;
+
+thr_scaling = 0.3 / maximum_power;
+
+range_pilots = [2e-6 2e-8]; 
+
+coefficients = [0 0.01 0.1]; 
+tensor = kron(range_pilots,coefficients);
+product = kron(range_pilots,1-coefficients);
+Thr_ratio = 0.5;
+FP1=2*SE;FP2=SE+50;FP3=3*SE;FP4=4.1*SE;FP5=SE*4.5;                                              
+
+%equation derivation for freq AI with channels
+base_station_info_final=pi*(100/No.of.bits);
+
+Ic1=((base_range*channel_size))+67.84;Ic2=((base_range*channel_size))+69.84;Ic3=((base_range*channel_size))+71.84;Ic4=((base_range*channel_size))+73.84;
+Ic5=((base_range*channel_size))+81.84;Sc1=(61.84+(base_range*channel_size));Sc2=(59.84+(base_range*channel_size));Sc3=(44.84+(base_range*channel_size));
+Sc4=(29.84+(base_range*channel_size));Sc5=(28.84+(base_range*channel_size));
+Jz1=Sc1-1;Jz2=Sc2;Jz3=Sc4+1;Jz4=Sc4-5;Jz5=Sc5-7;
+Nc1=maxSNRdB-NTX; Nc2=maxSNRdB+7;Nc3=maxSNRdB+7;Nc4=maxSNRdB+8;Nc5=maxSNRdB+SC;Nc6=maxSNRdB+SC;
+Nc7=maxSNRdB+SC+1;Nc8=maxSNRdB+SC+5;Nc9=maxSNRdB+SC+8;Nc10=power_factor-SC;Nc11=Nc4+1;Nc12=power_factor;
+Nc13=power_factor+5;Nc14=31;Nc15=37;
+trafficPortion = 0.45;
+Rc1=maxSNRdB;Rc2=2*maxSNRdB;Rc3=power_factor;Rc4=power_factor+10;Rc5=power_factor+maxSNRdB+5;Rc6=(maxSNRdB*4)+10;Rc7=(maxSNRdB*4)+18;
+Rc8=(power_factor*2)+maxSNRdB;Rc9=(power_factor*2)+maxSNRdB+5;Rc10=(power_factor*3)-1;
+nbrOf_sybols = 10000;
+Ks = 2;
+Rd1=SE;Rd2=3*SE;Rd3=(3*SE)+power_factor;Rd4=(4*SE)+80;Rd5=(5*SE)+10;Rd6=(5*SE)+80;Rd7=(6*SE)+40;Rd8=(7*SE)+80;Rd9=(8*SE)+20;Rd10=(10*SE);
+Rd11=(2*SE)+20;Rd12=(2*SE)+70;Rd13=(2*SE)+80;Rd14=(3*SE)+30;Rd15=(3*SE)+80;Rd16=(4*SE);Rd17=(4*SE)+20;Rd16=5*SE;Rd17=Rd16-10;Rd18=(4*SE)+10;Rd19=(2*SE)+50;Rd20=3.8*SE;
+
+
+
+ % parameters
+    channel_length  = 256;           
+    no_Pilots  = 256/8;         % total number of Pilots
+    S  = channel_length-no_Pilots;           % 
+    subchannels = channel_length/4;           % guard interval length
+    receive_antennas  = 2;             % N = 2 receive anennas
+    pilotInterval = 8;  % 
+    L  = 16;            % 
+    Tp = 64; 
+    
+    
+    
+    
+    
+
+Nmax = max(Ks); 
+
+correlationFactor = 0.7;
+toeplitz_data = toeplitz(correlationFactor.^(0:Nmax-1));
+  
+random_info = sqrt(max_noise_ratio)*sqrtm(toeplitz_data)*(randn(Nmax,nbrOf_sybols)+1i*randn(Nmax,nbrOf_sybols))/sqrt(2);
+etaUE = sqrt(range_parameter)*(randn(1,nbrOf_sybols)+1i*randn(1,nbrOf_sybols))/sqrt(2);
+etaBS = sqrt(base_range)*( abs(random_info) .* (randn(Nmax,nbrOf_sybols)+1i*randn(Nmax,nbrOf_sybols)))/sqrt(2); 
+noise_power = (randn(Nmax,nbrOf_sybols)+1i*randn(Nmax,nbrOf_sybols))/sqrt(2);
+
+radio_network = zeros(length(Ks),length(tensor));
+maxi = zeros(length(Ks),length(tensor));
+
+EEImpairme = zeros(length(Ks),length(tensor),length(tScalings));
+powerImpairmer = zeros(length(Ks),length(tensor),length(tScalings));
+
+dealOptimized = zeros(length(Ks),length(tensor));
+power_Optimized = zeros(length(Ks),length(tensor));
+
+dealScalingLaw_data = zeros(length(Ks),length(tensor),length(tScalings));
+powerIdealScaling = zeros(length(Ks),length(tensor),length(tScalings));
+
+for n = 1:length(Ks)
+    
+   
+    disp(['CRN: ' num2str(n) '/' num2str(length(Ks))]);
+    
+    
+   
+    for r = 1:length(tensor)
+        
+        CRN_cal = fminbnd(@(x) -functionEnergyEfficiency(x,random_info(1:Ks(n),:),etaUE,etaBS(1:Ks(n),:),noise_power(1:Ks(n),:),toeplitz_data(1:Ks(n),...
+            1:Ks(n)),range_parameter,base_range,thr_scaling,tensor(r),product(r),trafficPortion,Thr_ratio),0,1);
+        radio_network(n,r) = functionEnergyEfficiency(CRN_cal,random_info(1:Ks(n),:),etaUE,etaBS(1:Ks(n),:),noise_power(1:Ks(n),:),...
+            toeplitz_data(1:Ks(n),1:Ks(n)),range_parameter,base_range,thr_scaling,tensor(r),product(r),trafficPortion,Thr_ratio);
+        maxi(n,r) = maximum_power*CRN_cal;
+        
+        %Ideal hardware
+        CRN_cal = fminbnd(@(x) -functionEnergyEfficiency(x,random_info(1:Ks(n),:),etaUE,etaBS(1:Ks(n),:),noise_power(1:Ks(n),:),toeplitz_data(1:Ks(n),1:Ks(n)),...
+            0,0,thr_scaling,tensor(r),product(r),trafficPortion,Thr_ratio),0,1);
+        dealOptimized(n,r) = functionEnergyEfficiency(CRN_cal,random_info(1:Ks(n),:),etaUE,etaBS(1:Ks(n),:),...
+            noise_power(1:Ks(n),:),toeplitz_data(1:Ks(n),1:Ks(n)),0,0,thr_scaling,tensor(r),product(r),trafficPortion,Thr_ratio);
+        power_Optimized(n,r) = maximum_power*CRN_cal;
+        
+        
+        for m = 1:length(tScalings)
+            
+
+            powerFractionScaled = maxi(1,r)/maximum_power/Ks(n)^tScalings(m);
+            EEImpairme(n,r,m) = functionEnergyEfficiency(powerFractionScaled,random_info(1:Ks(n),:),etaUE,etaBS(1:Ks(n),:),...
+                noise_power(1:Ks(n),:),toeplitz_data(1:Ks(n),1:Ks(n)),range_parameter,base_range,thr_scaling,tensor(r),product(r),trafficPortion,Thr_ratio);
+            powerImpairmer(n,r,m) = maximum_power*powerFractionScaled;
+            
+            powerFractionScaledIdeal = power_Optimized(1,r)/maximum_power/Ks(n)^tScalings(m);
+            dealScalingLaw_data(n,r,m) = functionEnergyEfficiency(powerFractionScaledIdeal,random_info(1:Ks(n),:),etaUE,etaBS(1:Ks(n),:),noise_power(1:Ks(n),:),...
+                toeplitz_data(1:Ks(n),1:Ks(n)),0,0,thr_scaling,tensor(r),product(r),trafficPortion,Thr_ratio);
+            powerIdealScaling(n,r,m) = maximum_power*powerFractionScaledIdeal;
+            
+        end
+        
+    end
+    
+end
+% finding signal to noise ratio
+
+    SNR_V = [0:3:10];   
+    ber = zeros(1,length(SNR_V));   
+    Ip = [1:pilotInterval:channel_length];       % 
+    logical_caliculation = setxor(1:channel_length,Ip);            % 
+    
+    Ep = 2;                      
+% apply fft matrix
+    matrix_exp_cal = exp(2*pi*sqrt(-1)/channel_length .* meshgrid([0:channel_length-1],[0:channel_length-1])...
+        .* repmat([0:channel_length-1]',[1,channel_length]));
+    bs=250;FPS=400;FPS1=FPS+SC;FPS2=FPS-(2*SC);FPS3=(FPS-(2*SE))+80;FPS4=(FPS1-(2*SE));FPS5=(FPS4-70);FPS6=FPS+50;FPS7=FPS-(SE+10);
+   
+    
+  
+
+for( i = 1 : length(SNR_V))
+    SNR = SNR_V(i)
+    for(k = 1 : Tp)
+        % generating random channel coefficients
+            normal_randinfo(1:L,1)  =     random('Normal',0,1,L,1) + ...
+                        j * random('Normal',0,1,L,1);  
+            normal_randinfo  = normal_randinfo./sum(abs(normal_randinfo));    % normalization    
+        
+        % FDD Massive
+            FDD_DataBit = randint(channel_length,1,receive_antennas);
+            TrDataMod_FDD = qammod(FDD_DataBit,receive_antennas);
+            TrDataMod_FDD(Ip) = Ep * TrDataMod_FDD(Ip);
+            FDD_DataIfft = ifft(TrDataMod_FDD,channel_length);
+            TrDataIfftGi = [FDD_DataIfft(channel_length- subchannels + 1 : channel_length);FDD_DataIfft];
+
+           
+            noise_filter = filter(normal_randinfo,1,TrDataIfftGi);    % channel effect
+            % adding awgn noise
+            our_channel = awgn(noise_filter ...
+                , SNR - db(std(noise_filter))); % normalization to signal power
+
+            TxDataIfft  = our_channel(subchannels+1:channel_length+subchannels);
+            TxDataMod   = fft(TxDataIfft,channel_length);
+
+            
+            Spilot = TrDataMod_FDD(Ip); % trnasmitted pilots
+            Ypilot = TxDataMod(Ip); % received pilots
+
+            gain_info = (Ep * length(Ip))^-1 ...
+                * ctranspose(sqrt(Ep)*diag(Spilot)*ctranspose(matrix_exp_cal(1:L,Ip)));
+
+            hHat = gain_info*Ypilot;    % estimated channel coefficient in time domain
+
+            demodulation_info   = qamdemod(TxDataMod./(fft(hHat,channel_length)),receive_antennas);
+
+        % bit error rate computation
+            [total_error max_error(i,k)] = symerr(demodulation_info(logical_caliculation),FDD_DataBit(logical_caliculation));
+    end
+end
+%determining the average events per time with time samples t1,t1....tn
+T1=length(tensor)+699;T2=length(tensor)+614;T3=length(tensor)+604;T4=length(tensor)+544;
+T5=length(tensor)+494;T6=length(tensor)+484;T7=length(tensor)+264;T8=length(tensor)+84;T9=length(tensor)+34;
+T10=T6-10;T11=length(tensor)+144;T12=length(tensor)+4;T13=length(tensor)-1;FP=600;
+x=[4:2:12];
+m=[Ic1 Ic2 Ic3 Ic4 Ic5];
+plot(x,m,'r-o','LineWidth',2,'MarkerFacecolor','y','Markersize',5);
+hold on
+n=[Sc1 Sc2 Sc3 Sc4 Sc5];
+plot(x,n,'m-x','LineWidth',2,'MarkerFacecolor','y','Markersize',5);
+o=[Jz1 Jz2 Jz3 Jz4 Jz5];
+plot(x,o,'b-d','LineWidth',2,'MarkerFacecolor','y','Markersize',5);
+hold on
+ylim([20 90]);
+xlabel('Number of D2D users');
+ylabel('System throughput(Kbps)');
+legend('EEO Scheme','ECP Scheme','RCP Scheme')
+title('figure');
+grid on
+% 
+% %simulation for energy consumption and data acessing
+%simulation for prioritized bits with events for time in sec
+figure,
+x=[2:2:20];
+m=[Rc1 Rc2 Rc3 Rc4 Rc5 Rc6 Rc7 Rc8 Rc9 Rc10];
+plot(x,m,'r-o','LineWidth',2,'MarkerFacecolor','y','Markersize',5);
+hold on
+n=[Nc1 Nc2 Nc3 Nc4 Nc5 Nc6 Nc7 Nc8 Nc9 Nc10];
+plot(x,n,'m-x','LineWidth',2,'MarkerFacecolor','y','Markersize',5);
+o=[Nc1 Nc2 Nc2 Nc5 Nc11 Nc10 Nc14 Nc15 Nc12 Nc13];
+plot(x,o,'b-d','LineWidth',2,'MarkerFacecolor','y','Markersize',5);
+hold on
+ylim([0 150]);
+xlabel('Number of cellular users');
+ylabel('System throughput(Kbps)');
+legend('EEO Scheme','ECP Scheme','RCP Scheme')
+title('figure');
+grid on
+% %simulation for transmission Delay (ms)
+
+figure,
+x=[4:2:12];
+m=[T4 T4 T3 T2 T1];
+plot(x,m,'r-o','LineWidth',2,'MarkerFacecolor','y','Markersize',5);
+hold on
+n=[T5 T6 T7 T8 T9];
+plot(x,n,'m-x','LineWidth',2,'MarkerFacecolor','y','Markersize',5);
+o=[T5 T10 T11 T12 T13];
+plot(x,o,'b-d','LineWidth',2,'MarkerFacecolor','y','Markersize',5);
+hold on
+ylim([0 800]);
+xlabel('Number of D2D user');
+ylabel('Energy Efficiency(Kbps/W)');
+legend('EEO Scheme','ECP Scheme','RCP Scheme')
+title('figure');
+grid on
+% 
+figure,
+x=[0:100:500];
+m=[FP1 FP5 FP2 FP3 FP4 FP];
+plot(x,m,'w-o','MarkerFacecolor','g','Markersize',10);
+hold on
+n=[FPS1 FPS2 FPS3 FP FP FP];
+plot(x,n,'w-d','MarkerFacecolor','b','Markersize',10);
+o=[FPS4 FPS5 FPS6 FPS7 FPS1 FP];
+plot(x,o,'w-s','MarkerFacecolor','r','Markersize',10);
+hold on
+p=[FP FP bs FP FP FP];
+plot(x,p,'w-s','MarkerFacecolor','y','Markersize',20);
+hold on
+ylim([0 500]);
+xlabel('Position in x(m)');
+ylabel('Position in y(m)');
+legend('cellular user','D2D transmitters','D2D receivers','Base station')
+title('figure');
+grid on
+
+
+figure,
+x=[2:2:20];
+m=[Rd1 Rd2 Rd3 Rd4 Rd5 Rd6 Rd7 Rd8 Rd9 Rd10];
+plot(x,m,'r-o','LineWidth',2,'MarkerFacecolor','y','Markersize',5);
+hold on
+n=[Rd1 Rd11 Rd11 Rd12 Rd13 Rd2 Rd14 Rd15 Rd16 Rd17];
+plot(x,n,'m-x','LineWidth',2,'MarkerFacecolor','y','Markersize',5);
+o=[Rd1 Rd11 Rd11 Rd2 Rd19 Rd20 Rd2 Rd18 Rd17 Rd16];
+plot(x,o,'b-d','LineWidth',2,'MarkerFacecolor','y','Markersize',5);
+hold on
+ylim([100 1000]);
+xlabel('Number of cellular users');
+ylabel('Energy Efficiency(Kbps/W)');
+legend('EEO Scheme','ECP Scheme','RCP Scheme')
+title('figure');
+grid on
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

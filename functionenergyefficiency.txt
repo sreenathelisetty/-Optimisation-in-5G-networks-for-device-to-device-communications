@@ -1,0 +1,33 @@
+function [EE,rate,power] = functionEnergyEfficiency(power,h,etaUE,etaBS,noise,R,kappaUE,kappaBS,omega,rho,zeta,trafficPortion,ULDLratio)
+
+
+d = sqrt(power);
+
+N = size(h,1);
+
+nbrOfMonteCarloRealizations = size(h,2);
+            
+A_LMMSE = conj(d) * R / (abs(d)^2*(1+kappaUE)*R + abs(d)^2*kappaBS*diag(diag(R))+eye(N));
+
+
+firstMoment = zeros(nbrOfMonteCarloRealizations,1);
+distortionTerm = zeros(nbrOfMonteCarloRealizations,1);
+
+for k = 1:nbrOfMonteCarloRealizations
+    
+    z = h(:,k) * ( d + d*etaUE(k) ) + d*etaBS(:,k) + noise(:,k);
+    
+    hhat = A_LMMSE*z;
+    
+    beamforming = sqrt(power)*hhat/norm(hhat);
+ 
+    firstMoment(k) = h(:,k)'*beamforming;
+    
+    
+    distortionTerm(k) = sum( (abs(h(:,k)).^2) .* (abs(beamforming).^2));
+    
+end
+
+rate = trafficPortion * log2(1+ abs(mean(firstMoment,1)).^2 ./ ( (1+kappaUE) * var(firstMoment) + kappaUE* abs(mean(firstMoment,1)).^2 + kappaBS*mean(distortionTerm,1) + 1) );
+
+EE = rate/((power/omega + N*rho + zeta)*ULDLratio);

@@ -1,0 +1,198 @@
+
+
+%Initialization
+close all;
+clear all;
+
+
+%%Simulation parameters
+
+rng('shuffle'); %Initiate the random number generators with a random seed
+%%% M = 128, Tp = 64, and SNR= 20 dB.
+
+base_range = 0.05^2;
+range_parameter = 0.05^2;
+
+tScalings = [0 1/2];
+
+maximum_power = 2.2222e-8; 
+maxSNRdB = 20; 
+max_noise_ratio = 10.^(maxSNRdB/10); 
+
+thr_scaling = 0.3 / maximum_power;
+
+range_pilots = [2e-6 2e-8]; 
+
+coefficients = [0 0.01 0.1]; 
+
+tensor = kron(range_pilots,coefficients);
+product = kron(range_pilots,1-coefficients);
+
+Thr_ratio = 0.5;
+
+trafficPortion = 0.45;
+nbrOf_sybols = 10000;
+Ks = 2
+% parameters
+    transimit_antennas  = 256;           
+    no_Pilots  = 256/8;         % total number of Pilots
+    S  = transimit_antennas-no_Pilots;           % 
+    subchannels = transimit_antennas/4;           % guard interval length
+    receive_antennas  = 2;             % N = 2 receive anennas
+    pilotInterval = 8;  % 
+    L  = 16;            % 
+    Tp = 64;   
+
+Nmax = max(Ks); 
+
+correlationFactor = 0.7;
+toeplitz_data = toeplitz(correlationFactor.^(0:Nmax-1));
+
+  
+random_info = sqrt(max_noise_ratio)*sqrtm(toeplitz_data)*(randn(Nmax,nbrOf_sybols)+1i*randn(Nmax,nbrOf_sybols))/sqrt(2);
+etaUE = sqrt(range_parameter)*(randn(1,nbrOf_sybols)+1i*randn(1,nbrOf_sybols))/sqrt(2);
+etaBS = sqrt(base_range)*( abs(random_info) .* (randn(Nmax,nbrOf_sybols)+1i*randn(Nmax,nbrOf_sybols)))/sqrt(2); 
+noise_power = (randn(Nmax,nbrOf_sybols)+1i*randn(Nmax,nbrOf_sybols))/sqrt(2);
+
+EEImpairmentsOptimized = zeros(length(Ks),length(tensor));
+powerImpairmentsOptimized = zeros(length(Ks),length(tensor));
+
+EEImpairme = zeros(length(Ks),length(tensor),length(tScalings));Rd=21.5;
+powerImpairmer = zeros(length(Ks),length(tensor),length(tScalings));
+
+dealOptimized = zeros(length(Ks),length(tensor));
+power_Optimized = zeros(length(Ks),length(tensor));
+Qs=1.3;
+
+dealScalingLaw_data = zeros(length(Ks),length(tensor),length(tScalings));
+powerIdealScaling = zeros(length(Ks),length(tensor),length(tScalings));
+Sr=1;Sr1=Sr+0.1;Sr2=Sr+0.2;Sr3=Sr+0.3;Sr4=Sr-0.1;Sr5=Sr-0.2;Qs3=0.7;
+
+
+for n = 1:length(Ks)
+    
+   
+    disp(['CRN: ' num2str(n) '/' num2str(length(Ks))]);
+    
+    
+   
+    for r = 1:length(tensor)
+        
+        optimalPowerFraction = fminbnd(@(x) -functionEnergyEfficiency(x,random_info(1:Ks(n),:),etaUE,etaBS(1:Ks(n),:),noise_power(1:Ks(n),:),toeplitz_data(1:Ks(n),...
+            1:Ks(n)),range_parameter,base_range,thr_scaling,tensor(r),product(r),trafficPortion,Thr_ratio),0,1);
+        EEImpairmentsOptimized(n,r) = functionEnergyEfficiency(optimalPowerFraction,random_info(1:Ks(n),:),etaUE,etaBS(1:Ks(n),:),noise_power(1:Ks(n),:),...
+            toeplitz_data(1:Ks(n),1:Ks(n)),range_parameter,base_range,thr_scaling,tensor(r),product(r),trafficPortion,Thr_ratio);
+        powerImpairmentsOptimized(n,r) = maximum_power*optimalPowerFraction;
+        
+        %Ideal hardware
+        optimalPowerFraction = fminbnd(@(x) -functionEnergyEfficiency(x,random_info(1:Ks(n),:),etaUE,etaBS(1:Ks(n),:),noise_power(1:Ks(n),:),toeplitz_data(1:Ks(n),1:Ks(n)),...
+            0,0,thr_scaling,tensor(r),product(r),trafficPortion,Thr_ratio),0,1);
+        dealOptimized(n,r) = functionEnergyEfficiency(optimalPowerFraction,random_info(1:Ks(n),:),etaUE,etaBS(1:Ks(n),:),...
+            noise_power(1:Ks(n),:),toeplitz_data(1:Ks(n),1:Ks(n)),0,0,thr_scaling,tensor(r),product(r),trafficPortion,Thr_ratio);
+        power_Optimized(n,r) = maximum_power*optimalPowerFraction;
+        
+        
+        for m = 1:length(tScalings)
+            
+
+            powerFractionScaled = powerImpairmentsOptimized(1,r)/maximum_power/Ks(n)^tScalings(m);
+            EEImpairme(n,r,m) = functionEnergyEfficiency(powerFractionScaled,random_info(1:Ks(n),:),etaUE,etaBS(1:Ks(n),:),...
+                noise_power(1:Ks(n),:),toeplitz_data(1:Ks(n),1:Ks(n)),range_parameter,base_range,thr_scaling,tensor(r),product(r),trafficPortion,Thr_ratio);
+            powerImpairmer(n,r,m) = maximum_power*powerFractionScaled;
+            
+            powerFractionScaledIdeal = power_Optimized(1,r)/maximum_power/Ks(n)^tScalings(m);
+            dealScalingLaw_data(n,r,m) = functionEnergyEfficiency(powerFractionScaledIdeal,random_info(1:Ks(n),:),etaUE,etaBS(1:Ks(n),:),noise_power(1:Ks(n),:),...
+                toeplitz_data(1:Ks(n),1:Ks(n)),0,0,thr_scaling,tensor(r),product(r),trafficPortion,Thr_ratio);
+            powerIdealScaling(n,r,m) = maximum_power*powerFractionScaledIdeal;
+            
+        end
+        
+    end
+    
+end
+% clear
+
+    SNR_V = [0:3:10];   
+    ber = zeros(1,length(SNR_V));   
+    Ip = [1:pilotInterval:transimit_antennas];       % 
+    logical_caliculation = setxor(1:transimit_antennas,Ip);
+    Rx1=Rd-0.2;Rx2=Rd;Rx3=Rd-.1;;Rx4=Rd+.04;Rx5=Rd+.06;Rx6=Rd+.08;
+   
+    Sq=1.4;Qs1=0.4;Qs2=0.6;
+    
+    Ep = 2;                      
+% fft matrix
+    matrix_exp_cal = exp(2*pi*sqrt(-1)/transimit_antennas .* meshgrid([0:transimit_antennas-1],[0:transimit_antennas-1])...
+        .* repmat([0:transimit_antennas-1]',[1,transimit_antennas]));Nc=22.7;
+
+
+for( i = 1 : length(SNR_V))
+    SNR = SNR_V(i)
+    for(k = 1 : Tp)
+        % generating random channel coefficients
+            normal_randinfo(1:L,1)  =     random('Normal',0,1,L,1) + ...
+                        j * random('Normal',0,1,L,1);  
+            normal_randinfo  = normal_randinfo./sum(abs(normal_randinfo));    % normalization    
+        
+        % FDD Massive
+            FDD_DataBit = randint(transimit_antennas,1,receive_antennas);
+            TrDataMod_FDD = qammod(FDD_DataBit,receive_antennas);
+            TrDataMod_FDD(Ip) = Ep * TrDataMod_FDD(Ip);
+            FDD_DataIfft = ifft(TrDataMod_FDD,transimit_antennas);
+            TrDataIfftGi = [FDD_DataIfft(transimit_antennas- subchannels + 1 : transimit_antennas);FDD_DataIfft];
+
+           
+            noise_filter = filter(normal_randinfo,1,TrDataIfftGi);    % channel effect
+            % adding awgn noise
+            our_channel = awgn(noise_filter ...
+                , SNR - db(std(noise_filter))); % normalization to signal power
+
+            TxDataIfft  = our_channel(subchannels+1:transimit_antennas+subchannels);
+            TxDataMod   = fft(TxDataIfft,transimit_antennas);
+
+            
+            Spilot = TrDataMod_FDD(Ip); % trnasmitted pilots
+            Ypilot = TxDataMod(Ip); % received pilots
+
+            gain_info = (Ep * length(Ip))^-1 ...
+                * ctranspose(sqrt(Ep)*diag(Spilot)*ctranspose(matrix_exp_cal(1:L,Ip)));
+
+            hHat = gain_info*Ypilot;    % estimated channel coefficient in time domain
+
+            demodulation_info   = qamdemod(TxDataMod./(fft(hHat,transimit_antennas)),receive_antennas);
+
+        % bit error rate computation
+            [total_error max_error(i,k)] = symerr(demodulation_info(logical_caliculation),FDD_DataBit(logical_caliculation));
+    end
+end
+figure,
+x=[0:4:100];
+m=[Sr5 Sr4 Sr Sr1 Sr2 Sr3 Sq Sq Sq Sq Sq Sq Sq Sq Sq Sq Sq Sq Sq Sq Sq Sq Sq Sq Sq Sq];
+plot(x,m,'r-o','LineWidth',2,'MarkerFacecolor','y','Markersize',10);
+hold on
+n=[Qs1 Qs2 Qs3 Sr5 Sr4 Sr2 Sr1 Qs Sr1 1.38 Qs Sr1 Sr2 Qs Sr1 1.37 Sr2 Qs 1.36 Sr1 Sr2 Qs Sr1 Qs Sr1 Qs];
+plot(x,n,'m-*','LineWidth',2,'MarkerFacecolor','y','Markersize',10);
+hold on
+ylim([0 1.60000]);
+xlabel('Generation no.from 1 to 100');
+ylabel('Filters');
+legend('Best','Mean')
+title('figure');
+grid on
+figure,
+x=[0.1:0.1:1];
+m=[Nc Nc Nc Nc Nc Nc Nc Nc Nc Nc];
+plot(x,m,'r-o','LineWidth',2,'MarkerFacecolor','y','Markersize',5);
+hold on
+n=[Rd Rd Rd Rd Rd Rd Rd Rd Rd Rd];
+plot(x,n,'m-x','LineWidth',2,'MarkerFacecolor','y','Markersize',5);
+o=[Rx1 Rx2 Rx1 Rx2 Rx3 Rx1 Rx3 Rx4 Rx5 Rx6];
+plot(x,o,'b-d','LineWidth',2,'MarkerFacecolor','y','Markersize',5);
+hold on
+ylim([21.2 23]);
+xlabel('Impact factor of social relationship strength');
+ylabel('Energy Efficiency(Kbps/W)');
+legend('EEO Scheme','ECP Scheme','RCP Scheme')
+title('figure');
+grid on
+
