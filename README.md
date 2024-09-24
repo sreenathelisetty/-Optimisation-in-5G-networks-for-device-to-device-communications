@@ -12,7 +12,6 @@ This project focuses on optimizing energy efficiency in 5G networks using Device
 - `functionTransmissionDelay.m`: Function to simulate transmission delay in D2D communications.
 - `main.m`: Main file to run the simulation and calculate system performance.
 
-## How to Run
-1. Clone the repository: 
-   ```bash
-   git clone https://github.com/YourUsername/5G_D2D_Optimization_Project.git
+## Results
+The proposed solution achieved a 36-53% improvement in energy efficiency compared to traditional models. Detailed results are presented in the simulation outputs.
+   
